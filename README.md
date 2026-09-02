@@ -41,7 +41,7 @@ $ pip3 --version
 
 ### 1. Clone the Repository
 Clone the project locally to your working machine:
-$ git clone https://github.com/mattiabarbieri/pyrecon.git
+$ git clone https://github.com/Rhi1n0x/pyrecon.git
 $ cd pyrecon
 
 ### 2. Set Up a Virtual Environment (Optional but Recommended)
