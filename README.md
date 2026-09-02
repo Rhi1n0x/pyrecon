@@ -1,16 +1,19 @@
 # PyRecon 🔍
+> Fast, multithreaded reconnaissance and web probing tool for penetration testers.
 
-A fast, multithreaded Python reconnaissance utility built for Penetration Testers to automate DNS resolution, active HTTP/HTTPS probing, and web application fingerprinting.
+PyRecon automates DNS resolution, protocol probing (HTTP/HTTPS), header fingerprinting, and page title extraction against target domains.
 
-## Features
-- **Concurrent Probing:** Multithreaded execution using `concurrent.futures`.
-- **DNS Resolution Check:** Validates live targets before probing web ports.
-- **Protocol Discovery:** Probes both HTTP and HTTPS services automatically.
-- **Fingerprinting:** Identifies HTTP status codes, web server headers, and HTML page titles.
-- **Clean CLI Output:** Formatted terminal feedback with optional structured report output.
+---
 
-## Installation
+## 📋 Prerequisites
+- Python 3.8+
+- `pip` package manager
+
+---
+
+## 🚀 Quickstart Tutorial
+
+### 1. Clone the Repository
 ```bash
 git clone [https://github.com/](https://github.com/)<TUO-USERNAME>/pyrecon.git
 cd pyrecon
-pip install -r requirements.txt
