@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-PyRecon - Lightweight Modular Target Reconnaissance & Probing Tool
-Author: Mattia Barbieri
-Description: Automates DNS resolution, active HTTP/HTTPS probing, and basic header fingerprinting.
+PyRecon v1.1 - Lightweight Modular Target Reconnaissance & Probing Tool
+Author: Mattia Barbieri (Aggiornato)
+Description: Automates DNS resolution, active HTTP/HTTPS probing, and robust header/title fingerprinting.
 """
 
 import argparse
@@ -13,89 +13,74 @@ import sys
 from datetime import datetime
 import urllib3
 import requests
+from bs4 import BeautifulSoup
 
-# Disabilita warning per certificati SSL autofirmati/non validi durante la ricognizione
+# Disabilita warning per certificati SSL
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# Codici colore ANSI per output a terminale
-GREEN = "\033[92m"
-BLUE = "\033[94m"
-YELLOW = "\033[93m"
-RED = "\033[91m"
-RESET = "\033[0m"
-
+# Codici colore ANSI
+GREEN, BLUE, YELLOW, RED, RESET = "\033[92m", "\033[94m", "\033[93m", "\033[91m", "\033[0m"
 
 def print_banner():
     banner = f"""{BLUE}
     ╔═════════════════════════════════════════════╗
-    ║                PyRecon v1.0                 ║
-    ║   Automated Probing & Reconnaissance Tool   ║
+    ║                PyRecon v1.1                 ║
+    ║  Automated Probing & Reconnaissance Tool    ║
     ╚═════════════════════════════════════════════╝{RESET}"""
     print(banner)
 
-
 def resolve_domain(target):
-    """Risolve l'indirizzo IPv4 per il dominio fornito."""
     try:
-        ip = socket.gethostbyname(target)
-        return ip
+        return socket.gethostbyname(target)
     except socket.gaierror:
         return None
 
-
 def probe_target(target, timeout, user_agent):
-    """Esegue probing HTTP/HTTPS estraendo Status Code, Titolo HTML e Web Server."""
     results = []
-    protocols = ["https", "http"]
     headers = {"User-Agent": user_agent}
 
-    for proto in protocols:
+    for proto in ["https", "http"]:
         url = f"{proto}://{target}"
         try:
+            # allow_redirects=False per mappare i codici 30X
             resp = requests.get(
-                url,
-                headers=headers,
-                timeout=timeout,
-                verify=False,
-                allow_redirects=True,
+                url, headers=headers, timeout=timeout, verify=False, allow_redirects=False
             )
-            # Estrazione rudimentale del tag <title>
+            
+            # Estrazione sicura del title tramite BeautifulSoup
             title = "N/A"
-            if "<title>" in resp.text.lower():
-                try:
-                    start = resp.text.lower().index("<title>") + 7
-                    end = resp.text.lower().index("</title>", start)
-                    title = resp.text[start:end].strip().replace("\n", "")[:50]
-                except ValueError:
-                    pass
+            if resp.text:
+                soup = BeautifulSoup(resp.text, "html.parser")
+                if soup.title and soup.title.string:
+                    title = soup.title.string.strip().replace("\n", "")[:50]
 
             server_header = resp.headers.get("Server", "Unknown")
-            status_colored = (
-                f"{GREEN}{resp.status_code}{RESET}"
-                if resp.status_code < 400
-                else f"{RED}{resp.status_code}{RESET}"
-            )
+            location = resp.headers.get("Location", "")
+            
+            # Colorazione Status Code
+            status_color = GREEN if resp.status_code < 300 else (YELLOW if resp.status_code < 400 else RED)
+            status_str = f"{status_color}{resp.status_code}{RESET}"
+            
+            # Formattazione per eventuali reindirizzamenti
+            redirect_info = f" -> {location}" if location else ""
 
-            result_entry = {
+            entry = {
                 "url": url,
                 "status": resp.status_code,
-                "status_str": status_colored,
                 "server": server_header,
                 "title": title,
+                "location": location
             }
-            results.append(result_entry)
-            print(
-                f" [{result_entry['status_str']}] {url:<35} | Srv: {server_header:<15} | Title: {title}"
-            )
+            results.append(entry)
+            
+            print(f" [{status_str}] {url:<35} | Srv: {server_header:<15} | Title: {title}{redirect_info}")
 
         except requests.exceptions.RequestException:
             continue
 
     return results
 
-
 def process_host(target, timeout, user_agent):
-    """Orchestra la risoluzione DNS e il controllo web per singolo host."""
     target = target.strip()
     if not target or target.startswith("#"):
         return None
@@ -106,51 +91,29 @@ def process_host(target, timeout, user_agent):
         return None
 
     print(f" [{GREEN}RESOLV{RESET}] {target:<33} -> IP: {ip}")
-    probes = probe_target(target, timeout, user_agent)
-    return {"host": target, "ip": ip, "probes": probes}
-
+    return {"host": target, "ip": ip, "probes": probe_target(target, timeout, user_agent)}
 
 def main():
     print_banner()
-
-    parser = argparse.ArgumentParser(
-        description="Lightweight HTTP/HTTPS Prober and Recon Automation Tool"
-    )
+    parser = argparse.ArgumentParser(description="Lightweight HTTP/HTTPS Prober")
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("-d", "--domain", help="Singolo dominio target (es. example.com)")
-    group.add_argument(
-        "-l", "--list", help="File contenente lista di target (un dominio per riga)"
-    )
-
-    parser.add_argument(
-        "-t", "--threads", type=int, default=5, help="Numero di thread concorrenti (default: 5)"
-    )
-    parser.add_argument(
-        "--timeout", type=int, default=4, help="Timeout HTTP in secondi (default: 4)"
-    )
-    parser.add_argument(
-        "-o", "--output", help="File di output in formato TXT per salvare i risultati"
-    )
-    parser.add_argument(
-        "--user-agent",
-        default="Mozilla/5.0 (Windows NT 10.0; Win64; x64) PyRecon/1.0",
-        help="Custom User-Agent per le richieste HTTP",
-    )
-
+    group.add_argument("-d", "--domain", help="Singolo dominio target")
+    group.add_argument("-l", "--list", help="File lista target")
+    
+    parser.add_argument("-t", "--threads", type=int, default=5)
+    parser.add_argument("--timeout", type=int, default=4)
+    parser.add_argument("-o", "--output", help="File di output TXT")
+    parser.add_argument("--user-agent", default="Mozilla/5.0 PyRecon/1.1")
+    
     args = parser.parse_args()
 
-    targets = []
-    if args.domain:
-        targets.append(args.domain)
-    elif args.list:
+    targets = [args.domain] if args.domain else []
+    if args.list:
         if not os.path.exists(args.list):
             print(f"{RED}[-] Errore: File {args.list} non trovato.{RESET}")
             sys.exit(1)
         with open(args.list, "r", encoding="utf-8") as f:
             targets = [line.strip() for line in f if line.strip()]
-
-    print(f"[*] Inizio ricognizione su {len(targets)} target con {args.threads} thread...")
-    print("=" * 80)
 
     recon_data = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.threads) as executor:
@@ -160,11 +123,7 @@ def main():
         ]
         for future in concurrent.futures.as_completed(futures):
             res = future.result()
-            if res:
-                recon_data.append(res)
-
-    print("=" * 80)
-    print(f"[*] Ricognizione completata con successo alle {datetime.now().strftime('%H:%M:%S')}.")
+            if res: recon_data.append(res)
 
     if args.output:
         try:
@@ -173,13 +132,11 @@ def main():
                 for item in recon_data:
                     out.write(f"\nTarget: {item['host']} ({item['ip']})\n")
                     for p in item["probes"]:
-                        out.write(
-                            f"  - [{p['status']}] {p['url']} | Server: {p['server']} | Title: {p['title']}\n"
-                        )
+                        redir = f" -> {p['location']}" if p['location'] else ""
+                        out.write(f"  - [{p['status']}] {p['url']} | Server: {p['server']} | Title: {p['title']}{redir}\n")
             print(f"{GREEN}[+] Risultati salvati in: {args.output}{RESET}")
         except IOError as e:
-            print(f"{RED}[-] Errore nel salvataggio del file di output: {e}{RESET}")
-
+            print(f"{RED}[-] Errore salvataggio output: {e}{RESET}")
 
 if __name__ == "__main__":
     main()
